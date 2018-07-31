@@ -69,12 +69,35 @@ RUN cpanm DBIx::Class \
    DBIx::Class::DynamicSubclass DBIx::Class::InflateColumn::Serializer DBIx::Class::Schema DBIx::Class::TimeStamp \
  && rm -fr /root/.cpanm
 
-RUN cpanm MARKOV/MailTools-2.14.tar.gz Email::Send Email::Send::Test Digest::HMAC_SHA1 Digest::MD5 Email::Stuff Email::Valid \
-   Facebook::Graph File::Copy File::Path Guard IO::Socket::SSL \
-   JSON JSON::Any JSON::WebToken JSON::XS List::MoreUtils List::Util \
-   List::Util::WeightedChoice \
-   LWP::Protocol::https LWP::UserAgent \
-   JSON::RPC::Dispatcher JSON::RPC::Dispatcher::App \
+RUN cpanm --force File::Path \
+ && rm -fr /root/.cpanm
+
+RUN cpanm --force MailTools \
+ && rm -fr /root/.cpanm
+RUN cpanm Email::Send \
+ && rm -fr /root/.cpanm
+RUN cpanm Email::Send::Test \
+ && rm -fr /root/.cpanm
+RUN cpanm Digest::HMAC_SHA1 \
+ && rm -fr /root/.cpanm
+RUN cpanm Digest::MD5 Email::Stuff \
+ && rm -fr /root/.cpanm
+RUN cpanm Email::Valid \
+ && rm -fr /root/.cpanm
+
+RUN cpanm Facebook::Graph File::Copy Guard IO::Socket::SSL \
+ && rm -fr /root/.cpan
+
+RUN cpanm JSON JSON::Any JSON::WebToken JSON::XS List::MoreUtils List::Util \
+ && rm -fr /root/.cpan
+
+RUN cpanm List::Util::WeightedChoice \
+ && rm -fr /root/.cpan
+
+RUN cpanm LWP::Protocol::https LWP::UserAgent \
+ && rm -fr /root/.cpan
+
+RUN cpanm JSON::RPC::Dispatcher JSON::RPC::Dispatcher::App \
  && rm -fr /root/.cpanm
 
 RUN cpanm --verbose Memcached::libmemcached Net::Server::SS::PreFork \

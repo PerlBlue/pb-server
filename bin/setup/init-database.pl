@@ -5,10 +5,10 @@ use 5.010;
 
 use lib '/home/perlblue/pb-server/lib';
 
-use PB;
+use PerlBlue;
 
-my $config = PB->config;
-my $db = PB->db;
+my $config = PerlBlue->config;
+my $db = PerlBlue->db;
 
 say "Deploying Database";
 $db->deploy({ add_drop_table => 1});

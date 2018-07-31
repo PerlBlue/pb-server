@@ -46,6 +46,7 @@ sub check_password {
     my $csh = Crypt::SaltedHash->new;
     $csh->add($password);
     my $salted = $csh->generate;
+
     return $valid;
 }
 
