@@ -31,7 +31,7 @@ sub log {
 
 #--- Receive a Message Queue message
 #
-sub mg_hello {
+sub mq_hello {
     my ($self, $context) = @_;
 
     my $log = Log::Log4perl->get_logger('PerlBlue::WebSocket::User');
@@ -46,10 +46,10 @@ sub ws_clientCode {
     my ($self, $context) = @_;
 
     my $log = Log::Log4perl->get_logger('PerlBlue::WebSocket::User');
-    
+
     my $client_code_id = $context->client_code;
     $log->debug("clientCode: client_code [$client_code_id]");
-    
+
     my $client_code = PB::ClientCode->new({
         id      => $client_code_id,
         secret  => PB::Config->instance->get('secret'),
@@ -65,7 +65,7 @@ sub ws_clientCode {
     $self->log->debug("Time before put ".gettimeofday);
 
     $self->log->debug("Time after put ".gettimeofday);
-    
+
     return {
         clientCode   => $client_code->id,
     };
@@ -275,7 +275,7 @@ sub ws_loginWithEmailCode {
     $self->log->debug("Time before put ".gettimeofday);
 
     $self->log->debug("Time after put ".gettimeofday);
-    
+
 
     return {
         loginStage  => 'enterNewPassword',
