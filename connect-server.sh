@@ -1,1 +1,1 @@
-docker-compose exec pb-server /bin/bash
+docker-compose exec pb-websocket /bin/bash
