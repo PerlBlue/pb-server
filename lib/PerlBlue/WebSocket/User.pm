@@ -203,7 +203,10 @@ sub ws_loginWithPassword {
 
     $context->client_data->{user} = $user->as_hash;
 
-    return {};
+    return {
+        firstname   => 'Iain',
+        lastname    => 'Docherty',
+    };
 }
 
 #-- Enter New Password
