@@ -149,7 +149,7 @@ sub send {
 }
 
 # Send a message to the one client in the 'context'
-# 
+#
 sub render_json {
     my ($self, $context, $json) = @_;
 
@@ -170,9 +170,9 @@ sub send_json {
     my $sent = JSON->new->encode($msg);
     $self->send($connection, $sent);
 }
- 
+
 # Broadcast the same message to every connected client
-# 
+#
 sub broadcast_json {
     my ($self, $route, $content) = @_;
 
@@ -201,7 +201,7 @@ sub number_of_clients {
 
 # What we do on a client making a connection to the server
 # over-ride this in each class (usually a welcome message)
-# 
+#
 sub on_connect {
     my ($self, $context) = @_;
 
@@ -209,7 +209,7 @@ sub on_connect {
 }
 
 # Establish a connection
-# 
+#
 sub on_establish {
     my ($self, $connection) = @_;
 
@@ -223,13 +223,13 @@ sub on_establish {
         content     => {},
     });
     $log->debug("Establish");
-    
+
     # Create initial blank data for the connection
     $self->connections->{$connection} = $connection;
     $self->client_data->{$connection} = {};
 
     $log->info("START: there are ".scalar(keys %{$self->connections}). " connections");
-                
+
     my $reply = {
         room        => $self->room,
         route       => '/welcome',
@@ -239,9 +239,9 @@ sub on_establish {
     $self->render_json($context, $reply);
 
     my $state = {};
-    
+
     $log->debug("Establish");
-    
+
     $connection->on(
         each_message => sub {
             $self->_on_message($state, @_);
@@ -272,6 +272,7 @@ sub _on_message {
         $self->fatal($connection, $@);
         return;
     }
+    print STDERR "MESSAGE: $msg\n";
 
     $self->route_call('ws_', $json_msg, $connection);
 }
@@ -291,7 +292,7 @@ sub kill_client_data {
 
 
 # Report an error in a consistent manner back to the client
-# 
+#
 sub report_error {
     my ($self, $connection, $error, $path, $msg_id) = @_;
 
@@ -325,9 +326,15 @@ sub call {
     my ($self, $fh) = @_;
 
     $self->log->debug("got here [$fh]");
- 
+
     $self->ws_server->establish($fh)->cb(sub {
         my ($arg) = @_;
+
+        $self->log->debug("ARG: ".Dumper($arg));
+
+
+
+
 
         my $connection = eval { $arg->recv };
 
@@ -357,9 +364,9 @@ sub call {
 #
 #   Note, although this is similar to the websocket messages
 #   they do not call the same methods
-#   
+#
 #   the user_id is used to identify which user the message
-#   is for. By searching the connections it should be 
+#   is for. By searching the connections it should be
 #   possible to find the connection key(s) for that user.
 #
 #   If user_id is zero or not specified then it is a general
@@ -371,13 +378,13 @@ sub queue {
     $self->log->debug("JOB: ".Dumper($job->payload));
     my $payload = $job->payload;
     my $connection;
-    
+
     if ($payload->{user_id}) {
         # Then see if there is a connection with this user_id
         # TODO Currently it sends to all open sessions for this user
         # we probably want to only send to the session that requested
         # the data.
-        # 
+        #
         foreach my $key (keys %{$self->client_data}) {
             if (my $user = $self->client_data->{$key}{user}) {
                 if ($user->{id} == $payload->{user_id}) {
@@ -454,7 +461,7 @@ sub route_call {
 
             $self->render_json($context, $reply);
         }
-    }; 
+    };
     my @error;
     if ($@ and ref($@) eq 'ARRAY') {
         $self->log->error("ARRAY ERROR".Dumper($@));
