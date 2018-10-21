@@ -31,10 +31,11 @@ sub delete {
 # Get a value for a key
 #
 sub get {
-    my ($self, $namespace, $id) = @_;
+    my ($self, $namespace, $id, $cb) = @_;
 
     my $key = $self->namespace_key($namespace, $id);
-    return $self->redis->get($key);
+    $self->redis->get($key, $cb);
+    return;
 }
 
 # Get a value for a key and deserialize it (JSON)
@@ -56,24 +57,25 @@ sub get_and_deserialize {
 # Set a value (with optional timeout)
 #
 sub set {
-    my ($self, $namespace, $id, $value, $expire) = @_;
+    my ($self, $namespace, $id, $value, $cb, $expire) = @_;
 
     my $key             = $self->namespace_key($namespace, $id);
     my $frozen_value    = (ref $value) ? JSON::to_json($value) : $value;
-    my $retval = $self->redis->set($key, $frozen_value);
-    $self->expire($namespace, $id, $expire) if defined $expire;
-    return $retval;
+    $self->redis->set($key, $frozen_value, $cb);
+    $self->expire($namespace, $id, $cb, $expire) if defined $expire;
+    return;
 }
 
 # Set an expiry time
 #
 sub expire {
-    my ($self, $namespace, $id, $expire) = @_;
+    my ($self, $namespace, $id, $cb, $expire) = @_;
 
     return unless defined $expire;
 
     my $key = $self->namespace_key($namespace, $id);
-    return $self->redis->expire($key, $expire);
+    $self->redis->expire($key, $expire, $cb);
+    return;
 }
 
 
@@ -107,7 +109,7 @@ sub ttl {
     my ($self, $namespace, $id) = @_;
 
     my $key = $self->namespace_key($namespace, $id);
-    return $self->ttl($namespace);
+    return $self->redis->ttl($key);
 }
 
 # Check if a key exists
@@ -116,7 +118,7 @@ sub exists {
     my ($self, $namespace, $id) = @_;
 
     my $key = $self->namespace_key($namespace, $id);
-    return $self->exists($key);
+    return $self->redis->exists($key);
 }
 
 __PACKAGE__->meta->make_immutable;

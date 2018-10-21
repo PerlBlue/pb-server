@@ -11,7 +11,7 @@ use Digest::MD5 qw(md5_hex);
 use Data::Dumper;
 
 # A unique ID for the client_code key
-# 
+#
 # If one is not supplied, a valid client code is generated
 has id => (
     is      => 'rw',
@@ -27,7 +27,7 @@ has namespace => (
 );
 
 # The Cache object
-# 
+#
 has cache => (
     is          => 'ro',
     lazy        => 1,
@@ -98,7 +98,7 @@ sub BUILD {
     my ($self,$args) = @_;
 
     if (defined $self->id) {
-        $self->from_hash($self->cache->get_and_deserialize($self->namespace, $self->id));
+ #       $self->from_hash($self->cache->get_and_deserialize($self->namespace, $self->id));
     }
 }
 
@@ -129,18 +129,18 @@ sub from_hash {
 
 
 #--- extend the client_code timer
-# 
+#
 sub extend {
     my ($self) = @_;
 
     $self->extended($self->extended + 1);
-    $self->cache->set($self->namespace, $self->id, $self->to_hash, $self->timeout_sec);
+ #   $self->cache->set($self->namespace, $self->id, $self->to_hash, $self->timeout_sec);
 }
 
 
 #--- Create a random Client Code id
 #   Add a 'secret' so that people can't invent their own Client Code
-#   
+#
 sub create_valid_id {
     my ($self) = @_;
 

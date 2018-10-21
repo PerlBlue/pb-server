@@ -7,7 +7,8 @@ use lib "/home/perlblue/pb-server/lib";
 
 use AnyEvent;
 use AnyEvent::Socket qw(tcp_server);
-use AnyEvent::Redis;
+#use PerlBlue::Cache;
+#use PerlBlue::Redis;
 
 use PerlBlue;
 use PerlBlue::WebSocket;
@@ -23,7 +24,6 @@ my $condvar = AnyEvent->condvar;
 
 Log::Log4perl->init('/home/perlblue/pb-server/etc/log4perl.conf');
 my $log = Log::Log4perl->get_logger('WS');
-
 
 my $web_socket = PerlBlue::WebSocket->new;
 
@@ -50,10 +50,6 @@ while (1) {
     # The message is handled by the WebSocket queue router
     $web_socket->queue($job);
 }
-
-#--- Redis handler
-#
-
 
 $condvar->recv;
 print STDERR "WE SHOULD NEVER GET HERE\n";
