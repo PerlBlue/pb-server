@@ -43,11 +43,240 @@ has connections => (
     default => sub { {} },
 );
 
+# Data private to each client, indexed by connection
 has client_data => (
     is      => 'rw',
     isa     => 'HashRef',
     default => sub { {} },
 );
+
+# Shared data, available to every client, indexed by namespace and connection
+#   $self->shared_data->{$connection}{$namespace} = { ... }
+#
+has shared_data => (
+    is      => 'rw',
+    isa     => 'HashRef',
+    default => sub { {} },
+);
+
+# Give the module a heartbeat (every 10 seconds)
+#
+sub BUILD {
+    my ($self) = @_;
+
+    $self->log->info("BUILD WEBSOCKET #### $self");
+    my $ws = AnyEvent->timer(
+        after       => 10,
+        interval    => 10,
+        cb          => sub {
+            $self->heartbeat;
+        },
+    );
+    # Persist the heartbeat timer.
+    $self->hb_timer($ws);
+
+}
+
+
+# This is the entry point for a WebSocket call
+# The HTTP call is promoted to a WS call
+#
+sub call {
+    my ($self, $fh) = @_;
+
+    $self->log->debug("WS Promotion [$fh]");
+
+    $self->ws_server->establish($fh)->cb(sub {
+        my ($arg) = @_;
+
+        $self->log->debug("Establish call. ARG: ".Dumper($arg));
+
+        my $connection = eval { $arg->recv };
+
+        if ($@) {
+            warn "Invalid connection request: $@\n";
+            close($fh);
+            return;
+        }
+        $self->on_establish($connection);
+    });
+}
+
+
+# Establish a connection
+#
+sub on_establish {
+    my ($self, $connection) = @_;
+
+    $self->incr_stat('stats_new_connections');
+    my $log = $self->log;
+    $log->info("Establish: [$connection]");
+
+    # Create initial blank data for the connection
+    $self->connections->{$connection} = $connection;
+    $self->client_data->{$connection} = {};
+    $self->shared_data->{$connection} = {};
+
+    my $context = PB::WebSocket::Context->new({
+        room            => $self->room,
+        connection      => $connection,
+        content         => {},
+        msg_id          => 0,
+        client_data     => $self->client_data->{$connection},
+        shared_data     => $self->shared_data,
+        client_code     => 0,
+    });
+
+    my $reply = {
+        room        => $self->room,
+        route       => '/welcome',
+        content     => $self->on_connect($context),
+    };
+    $self->render_json($context, $reply);
+
+    my $state = {};
+
+    $connection->on(
+        each_message => sub {
+            $self->_on_message($state, @_);
+        }
+    );
+    $connection->on(
+        finish => sub {
+            $self->incr_stat('stats_die_connections');
+            $self->_kill_client_data($connection);
+        },
+    );
+}
+
+# On receiving a message from a client
+#
+sub _on_message {
+    my ($self, $state, $connection, $msg) = @_;
+
+    $msg = $msg->body;
+    my $log = $self->log;
+
+    $log->info("RCVD: [$connection] $msg");
+
+    my $json = JSON->new;
+    my $json_msg = eval {$json->decode($msg)};
+    if ($@) {
+        $log->error($@);
+        $self->fatal($connection, $@);
+        return;
+    }
+    $self->_route_call('ws_', $json_msg, $connection);
+}
+
+# Remove all data held for the client
+#
+sub _kill_client_data {
+    my ($self, $connection) = @_;
+
+    my $log = $self->log;
+    delete $self->connections->{$connection};
+    delete $self->client_data->{$connection};
+    delete $self->shared_data->{$connection};
+
+    $log->info("FINISH: [$self] there are ".scalar(keys %{$self->connections}). " connections");
+    undef $connection;
+    $log->info("killed connection data");
+}
+
+
+sub _route_call {
+    my ($self, $prefix, $payload, $connection) = @_;
+
+    # Convert the route to a class and method
+    my $path        = $payload->{route};
+    my $content     = $payload->{content} || {};
+    my $client_code = $payload->{clientCode};
+    my $msg_id      = $payload->{msgId} || 0;
+
+    eval {
+        my ($route, $method) = $path =~ m{(.*)/([^/]*)};
+        $method = $prefix.$method;
+        $route =~ s{/$}{};
+        $route =~ s{^/}{};
+        $route =~ s{/}{::};
+        $route =~ s/([\w']+)/\u\L$1/g;      # Capitalize user::foo to User::Foo
+        $self->log->debug("route = [$route]");
+        my $obj;
+        if ($route) {
+            $route = ref($self)."::".$route;
+            # TODO time how long an eval takes?
+
+            eval "require $route";
+            $obj = $route->new( {
+                parent      => $self,
+                connection  => $connection,
+            } );
+        }
+        else {
+            # TODO Handle unknown routes better...
+
+            $self->log->debug("ROUTE... [SELF!]");
+            $route = $self;
+            $obj = $self;
+        }
+
+        $self->log->debug("route = [$route]");
+        my $context = PB::WebSocket::Context->new({
+            room            => $self->room,
+            connection      => $connection,
+            content         => $content,
+            msg_id          => $msg_id,
+            client_data     => $connection ? $self->client_data->{$connection} : {},
+            shared_data     => $self->shared_data,
+            client_code     => $client_code,
+        });
+        $self->log->debug("Call [$obj][$method] connection=[$connection]");
+
+        # If the method returns content, then render
+        # a JSON reply
+        #
+        my $content = $obj->$method($context);
+        if (defined $content) {
+            my $reply = {
+                room        => $self->room,
+                route       => $path,
+                content     => $content,
+                status      => 0,
+                message     => 'OK',
+            };
+            if ($msg_id) {
+                $reply->{msgId} = $msg_id;
+            }
+
+            $self->render_json($context, $reply);
+        }
+    };
+    my @error;
+    if ($@ and ref($@) eq 'ARRAY') {
+        $self->log->error("ARRAY ERROR".Dumper($@));
+        @error = @{$@};
+    }
+    elsif ($@) {
+        $self->log->error("UNKNOWN ERROR [".$@."]");
+        @error = (
+            1000,
+            'unknown error',
+            'please refer to server error log!',
+        );
+    }
+    if (@error) {
+        $self->report_error($connection, \@error, $path, $msg_id);
+
+    }
+}
+
+
+
+
+
+
+
 
 sub log {
     my ($self) = @_;
@@ -77,23 +306,17 @@ has [qw(stats_new_connections stats_die_connections stats_sent_messages)] => (
     default     => 0,
 );
 
-# Give the module a heartbeat (every 10 seconds)
-#
-sub BUILD {
-    my ($self) = @_;
 
-    $self->log->info("BUILD WEBSOCKET #### $self");
-    my $ws = AnyEvent->timer(
-        after       => 10,
-        interval    => 10,
-        cb          => sub {
-            $self->heartbeat;
-        },
-    );
-    # Persist the heartbeat timer.
-    $self->hb_timer($ws);
 
-}
+
+
+
+
+
+
+
+
+
 
 
 # Generate a hash for the statistics of this instance
@@ -144,6 +367,8 @@ sub fatal {
 sub send {
     my ($self, $connection, $msg) = @_;
 
+    $self->log->debug("SEND: [$msg]\n");
+
     $self->incr_stat('stats_sent_messages');
     $connection->send($msg);
 }
@@ -151,21 +376,21 @@ sub send {
 # Send a message to the one client in the 'context'
 #
 sub render_json {
-    my ($self, $context, $json) = @_;
+    my ($self, $context, $content) = @_;
 
-    my $sent = JSON->new->encode($json);
+    my $sent = JSON->new->encode($content);
     $self->send($context->connection, $sent);
 }
 
 # Send a message to one client, without the context
 #
 sub send_json {
-    my ($self, $connection, $route, $json) = @_;
+    my ($self, $connection, $route, $content) = @_;
 
     my $msg = {
         room        => $self->room,
         route       => $route,
-        content     => $json,
+        content     => $content,
     };
     my $sent = JSON->new->encode($msg);
     $self->send($connection, $sent);
@@ -185,6 +410,8 @@ sub broadcast_json {
 
     my $sent = JSON->new->encode($json);
     $log->info("BCAST: [$self] [$sent] connections=[".$self->number_of_clients."]");
+
+
     my $i = 0;
     foreach my $key (keys %{$self->connections}) {
         $self->send($self->connections->{$key}, $sent);
@@ -200,7 +427,6 @@ sub number_of_clients {
 }
 
 # What we do on a client making a connection to the server
-# over-ride this in each class (usually a welcome message)
 #
 sub on_connect {
     my ($self, $context) = @_;
@@ -208,87 +434,9 @@ sub on_connect {
     return {};
 }
 
-# Establish a connection
-#
-sub on_establish {
-    my ($self, $connection) = @_;
 
-    $self->incr_stat('stats_new_connections');
-    my $log = $self->log;
-    $log->info("Establish: [$connection]");
 
-    my $context = PB::WebSocket::Context->new({
-        room        => $self->room,
-        connection  => $connection,
-        content     => {},
-    });
-    $log->debug("Establish");
 
-    # Create initial blank data for the connection
-    $self->connections->{$connection} = $connection;
-    $self->client_data->{$connection} = {};
-
-    $log->info("START: there are ".scalar(keys %{$self->connections}). " connections");
-
-    my $reply = {
-        room        => $self->room,
-        route       => '/welcome',
-        content     => $self->on_connect($context),
-    };
-    $log->debug("Establish");
-    $self->render_json($context, $reply);
-
-    my $state = {};
-
-    $log->debug("Establish");
-
-    $connection->on(
-        each_message => sub {
-            $self->_on_message($state, @_);
-        }
-    );
-    $connection->on(
-        finish => sub {
-            $self->incr_stat('stats_die_connections');
-            $self->kill_client_data($connection);
-        },
-    );
-}
-
-# On receiving a message from a client
-#
-sub _on_message {
-    my ($self, $state, $connection, $msg) = @_;
-
-    $msg = $msg->body;
-    my $log = $self->log;
-
-    $log->info("RCVD: [$connection] $msg");
-
-    my $json = JSON->new;
-    my $json_msg = eval {$json->decode($msg)};
-    if ($@) {
-        $log->error($@);
-        $self->fatal($connection, $@);
-        return;
-    }
-    print STDERR "MESSAGE: $msg\n";
-
-    $self->route_call('ws_', $json_msg, $connection);
-}
-
-# Remove all data held for the client
-#
-sub kill_client_data {
-    my ($self, $connection) = @_;
-
-    my $log = $self->log;
-    delete $self->connections->{$connection};
-    delete $self->client_data->{$connection};
-    $log->info("FINISH: [$self] there are ".scalar(keys %{$self->connections}). " connections");
-    undef $connection;
-    $log->info("killed connection data");
-}
 
 
 # Report an error in a consistent manner back to the client
@@ -320,32 +468,7 @@ sub report_error {
     $self->send($connection, $msg);
 }
 
-# This is the entry point for a WebSocket call
-#
-sub call {
-    my ($self, $fh) = @_;
 
-    $self->log->debug("got here [$fh]");
-
-    $self->ws_server->establish($fh)->cb(sub {
-        my ($arg) = @_;
-
-        $self->log->debug("ARG: ".Dumper($arg));
-
-
-
-
-
-        my $connection = eval { $arg->recv };
-
-        if ($@) {
-            warn "Invalid connection request: $@\n";
-            close($fh);
-            return;
-        }
-        $self->on_establish($connection);
-    });
-}
 
 # This is responsible for handling beanstalk queue messages
 #   typical messages looks like
@@ -389,7 +512,7 @@ sub queue {
             if (my $user = $self->client_data->{$key}{user}) {
                 if ($user->{id} == $payload->{user_id}) {
                     $connection = $self->connections->{$key};
-                    $self->route_call('mq_', $job->payload, $connection);
+                    $self->_route_call('mq_', $job->payload, $connection);
                 }
             }
         }
@@ -402,84 +525,7 @@ sub queue {
 }
 
 
-sub route_call {
-    my ($self, $prefix, $payload, $connection) = @_;
 
-    # Convert the route to a class and method
-    my $path        = $payload->{route};
-    my $content     = $payload->{content} || {};
-    my $client_code = $payload->{clientCode};
-    my $msg_id      = $payload->{msgId} || 0;
-
-    eval {
-        my ($route, $method) = $path =~ m{(.*)/([^/]*)};
-        $method = $prefix.$method;
-        $route =~ s{/$}{};
-        $route =~ s{^/}{};
-        $route =~ s{/}{::};
-        $route =~ s/([\w']+)/\u\L$1/g;      # Capitalize user::foo to User::Foo
-        $self->log->debug("route = [$route]");
-        my $obj;
-        if ($route) {
-            $route = ref($self)."::".$route;
-            # TODO time how long an eval takes?
-
-            eval "require $route";
-            $obj = $route->new({});
-        }
-        else {
-            $self->log->debug("ROUTE... [SELF!]");
-            $route = $self;
-            $obj = $self;
-        }
-        $self->log->debug("route = [$route]");
-        my $context = PB::WebSocket::Context->new({
-            room            => $self->room,
-            connection      => $connection,
-            content         => $content,
-            msg_id          => $msg_id,
-            client_data     => $connection ? $self->client_data->{$connection} : {},
-            client_code     => $client_code,
-        });
-        $self->log->debug("Call [$obj][$method] connection=[$connection]");
-
-        # If the method returns content, then render
-        # a JSON reply
-        #
-        my $content = $obj->$method($context);
-        if (defined $content) {
-            my $reply = {
-                room        => $self->room,
-                route       => $path,
-                content     => $content,
-                status      => 0,
-                message     => 'OK',
-            };
-            if ($msg_id) {
-                $reply->{msgId} = $msg_id;
-            }
-
-            $self->render_json($context, $reply);
-        }
-    };
-    my @error;
-    if ($@ and ref($@) eq 'ARRAY') {
-        $self->log->error("ARRAY ERROR".Dumper($@));
-        @error = @{$@};
-    }
-    elsif ($@) {
-        $self->log->error("UNKNOWN ERROR [".$@."]");
-        @error = (
-            1000,
-            'unknown error',
-            'please refer to server error log!',
-        );
-    }
-    if (@error) {
-        $self->report_error($connection, \@error, $path, $msg_id);
-
-    }
-}
 
 
 1;

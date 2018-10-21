@@ -12,7 +12,7 @@ use PB::ClientCode;
 use PB::Queue;
 use PB::Config;
 
-#extends 'PerlBlue::WebSocket';
+extends 'PerlBlue::WebSocket::Base';
 
 # A user has joined the server
 #

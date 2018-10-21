@@ -5,7 +5,7 @@ use Module::Find qw(useall);
 
 use PerlBlue::SDB;
 use PerlBlue::Redis;
-use PB::Cache;
+#use PB::Cache;
 use PB::Queue;
 use PB::Config;
 
@@ -21,15 +21,6 @@ PB::Config->initialize({
 });
 
 my $config = Config::JSON->new('/home/perlblue/pb-server/etc/perlblue.conf');
-
-
-my $redis = PerlBlue::Redis->instance;
-
-my $cache = PB::Cache->new(
-    redis => $redis,
-);
-#servers => $config->get('memcached'));
-
 
 PB::Queue->initialize({
    server      => $config->get('beanstalk/server')
@@ -49,10 +40,6 @@ sub config {
 sub db {
     #return $db;
     PerlBlue::SDB->instance->db;
-}
-
-sub cache {
-    return $cache;
 }
 
 sub queue {

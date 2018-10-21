@@ -3,7 +3,7 @@ package PB::WebSocket::Context;
 use Moose;
 use namespace::autoclean;
 
-has 'server' => (
+has 'room' => (
     is      => 'rw',
     isa     => 'Str',
 );
@@ -32,6 +32,15 @@ has 'client_data' => (
 #    isa     => 'Maybe[PB::DB::Result::User]',
     default => sub { {} },
 );
+
+# Shared data is all the data shared between the clients
+# which is indexed from the connection ID
+#
+has 'shared_data' => (
+    is      => 'rw',
+    default => sub { {} },
+);
+
 
 has 'msg_id' => (
     is      => 'rw',

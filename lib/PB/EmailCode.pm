@@ -64,7 +64,7 @@ sub log {
 sub BUILD {
     my ($self,$args) = @_;
 
-    $self->from_hash($self->cache->get_and_deserialize($self->namespace, $self->id));
+ #   $self->from_hash($self->cache->get_and_deserialize($self->namespace, $self->id));
     $self->store;
 }
 
@@ -113,7 +113,7 @@ for my $func (qw(user_id)) {
 sub store {
     my ($self) = @_;
 
-    $self->cache->set($self->namespace, $self->id, $self->to_hash, $self->timeout_sec);
+ #   $self->cache->set($self->namespace, $self->id, $self->to_hash, $self->timeout_sec);
     return $self;
 }
 

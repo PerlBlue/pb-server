@@ -1,3 +1,4 @@
 bin/setup/server/*/
 etc
 log/*
+.DS_Store
