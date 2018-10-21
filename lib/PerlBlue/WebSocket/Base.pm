@@ -48,7 +48,9 @@ sub log {
 sub my_shared_data {
     my ($self, $namespace) = @_;
 
-    my $shared_data = $self->parent->shared_data->{$self->connection}{$namespace} || {};
+    if (! defined($self->parent->shared_data->{$self->connection}{$namespace})) {
+        $self->parent->shared_data->{$self->connection}{$namespace} = {};
+    }
     $self->log->debug("SHARED DATA: ".Dumper($self->parent->shared_data));
 
     return $self->parent->shared_data->{$self->connection}{$namespace};
