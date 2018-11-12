@@ -145,6 +145,10 @@ sub on_establish {
         finish => sub {
             $self->incr_stat('stats_die_connections');
             $self->_kill_client_data($connection);
+
+            # TODO: We need to remove this dependency. Perhaps register a callback?
+            #
+            $self->_route_call('ws_', { route => '/demo/unmount' }, $connection);
         },
     );
 }

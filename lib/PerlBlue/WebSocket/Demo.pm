@@ -30,12 +30,10 @@ sub ws_register {
     my ($self, $context) = @_;
 
     my $log = Log::Log4perl->get_logger('PerlBlue::WebSocket::Demo::ws_register');
-    $log->debug("XXXXXX GOT HERE XXXXXXXX\n");
 
     # Create a new store for this counter instance.
     my $shared_data = $self->my_shared_data('Demo');
 
-    $log->debug("SHARED DATA [$shared_data]\n");
     my ($id) = $context->connection =~ m/\((.*)\)/;
 
     $shared_data->{id}      = $id;
@@ -48,6 +46,7 @@ sub ws_register {
 
     return;
 }
+
 
 #--- Validate the message is for me
 #
@@ -77,11 +76,6 @@ sub ws_enable {
         return;
     }
 
-    $log->debug("CONTENT: ".Dumper($context->content));
-    $log->debug("CONNECT: ".$context->connection."\n");
-
-    #my $id = $context->content->{id};
-
     my $shared_data = $self->my_shared_data('Demo');
     $shared_data->{status} = 'enabled';
     $shared_data->{number}++;
@@ -108,6 +102,17 @@ sub ws_disable {
     $self->broadcast_data();
     return;
 }
+
+#--- Unmount a counter
+#
+sub ws_unmount {
+    my ($self, $context) = @_;
+
+    my $log = Log::Log4perl->get_logger('PerlBlue::WebSocket::Demo::ws_unmount');
+
+    $self->broadcast_data();
+}
+
 
 #--- Broadcast the state of all counters to every connection
 #
