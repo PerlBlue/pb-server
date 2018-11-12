@@ -33,7 +33,7 @@ services:
     container_name: 'pb-bg-worker'
     depends_on:
       - 'pb-websocket'
-    image: 'perlblue/pb-server'
+    image: 'icydee/perlblue'
     volumes:
         - ./bin:/home/perlblue/pb-server/bin
         - ./docs:/home/perlblue/pb-server/docs
@@ -112,7 +112,7 @@ services:
       - 'pb-redis'
     environment:
       - 'KA_NO_MIDDLEWARE=1'
-    image: 'perlblue/pb-server'
+    image: 'icydee/perlblue'
     ports:
       - '8090:80'
     volumes:
